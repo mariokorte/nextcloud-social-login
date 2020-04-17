@@ -44,7 +44,7 @@ class CustomOpenIDConnect extends CustomOAuth2
         }
 
         $userInfoUrl = trim($this->config->get('endpoints')['user_info_url']);
-        if (!empty($userInfoUrl) {
+        if (!empty($userInfoUrl)) {
             $profile = new Data\Collection( $this->apiRequest($userInfoUrl) );
             $userProfile->identifier  = $profile->get('nickname');
 
