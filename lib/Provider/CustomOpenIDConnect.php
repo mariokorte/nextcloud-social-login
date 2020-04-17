@@ -44,28 +44,31 @@ class CustomOpenIDConnect extends CustomOAuth2
         }
 
         $userInfoUrl = trim($this->config->get('endpoints')['user_info_url']);
-        if (!empty($userInfoUrl) && !isset(
-            $userProfile->displayName,
-            $userProfile->photoURL,
-            $userProfile->email,
-            $userProfile->data['groups']
-        )) {
+        if (!empty($userInfoUrl) {
             $profile = new Data\Collection( $this->apiRequest($userInfoUrl) );
             $userProfile->identifier  = $profile->get('nickname');
-            if (empty($userProfile->displayName)) {
-                $userProfile->displayName = $profile->get('name') ?: $profile->get('nickname');
-            }
-            if (empty($userProfile->photoURL)) {
-                $userProfile->photoURL = $profile->get('picture') ?: $profile->get('avatar');
-                if (preg_match('#<img.+src=["\'](.+?)["\']#', $userProfile->photoURL, $m)) {
-                    $userProfile->photoURL = $m[1];
+
+            if (!isset(
+                $userProfile->displayName,
+                $userProfile->photoURL,
+                $userProfile->email,
+                $userProfile->data['groups']
+            )) {
+                if (empty($userProfile->displayName)) {
+                    $userProfile->displayName = $profile->get('name') ?: $profile->get('nickname');
                 }
-            }
-            if (empty($userProfile->email)) {
-                $userProfile->email = $profile->get('email');
-            }
-            if (empty($userProfile->data['groups']) && null !== $groups = $this->getGroups($profile)) {
-                $userProfile->data['groups'] = $groups;
+                if (empty($userProfile->photoURL)) {
+                    $userProfile->photoURL = $profile->get('picture') ?: $profile->get('avatar');
+                    if (preg_match('#<img.+src=["\'](.+?)["\']#', $userProfile->photoURL, $m)) {
+                        $userProfile->photoURL = $m[1];
+                    }
+                }
+                if (empty($userProfile->email)) {
+                    $userProfile->email = $profile->get('email');
+                }
+                if (empty($userProfile->data['groups']) && null !== $groups = $this->getGroups($profile)) {
+                    $userProfile->data['groups'] = $groups;
+                }
             }
         }
 
