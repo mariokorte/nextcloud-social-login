@@ -2,13 +2,14 @@
 
 namespace OCA\SocialLogin\Settings;
 
+use OCA\SocialLogin\Db\SocialConnectDAO;
+use OCA\SocialLogin\Service\ProviderService;
 use OCP\AppFramework\Http\TemplateResponse;
-use OCP\Settings\ISettings;
+use OCP\IConfig;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
-use OCP\IConfig;
+use OCP\Settings\ISettings;
 use OCP\Util;
-use OCA\SocialLogin\Db\SocialConnectDAO;
 
 class PersonalSettings implements ISettings
 {
@@ -22,19 +23,23 @@ class PersonalSettings implements ISettings
     private $userSession;
     /** @var SocialConnectDAO */
     private $socialConnect;
+    /** @var ProviderService */
+    private $providerService;
 
     public function __construct(
         $appName,
         IConfig $config,
         IURLGenerator $urlGenerator,
         IUserSession $userSession,
-        SocialConnectDAO $socialConnect
+        SocialConnectDAO $socialConnect,
+        ProviderService $providerService
     ) {
         $this->appName = $appName;
         $this->config = $config;
         $this->urlGenerator = $urlGenerator;
         $this->userSession = $userSession;
         $this->socialConnect = $socialConnect;
+        $this->providerService = $providerService;
     }
 
     public function getForm()
@@ -49,29 +54,17 @@ class PersonalSettings implements ISettings
             'disable_password_confirmation' => $this->config->getUserValue($uid, $this->appName, 'disable_password_confirmation', false),
         ];
         if ($params['allow_login_connect']) {
-            if ($params['tg_bot'] = $this->config->getAppValue($this->appName, 'tg_bot')) {
-                $params['tg_redirect_url'] = $this->urlGenerator->linkToRouteAbsolute($this->appName.'.login.telegram');
-                $csp = new \OCP\AppFramework\Http\ContentSecurityPolicy();
-                $csp->addAllowedScriptDomain('telegram.org')
-                    ->addAllowedFrameDomain('oauth.telegram.org')
-                ;
-                $manager = \OC::$server->getContentSecurityPolicyManager();
-                $manager->addDefaultPolicy($csp);
-            }
-
             $providers = json_decode($this->config->getAppValue($this->appName, 'oauth_providers', '[]'), true);
             if (is_array($providers)) {
                 foreach ($providers as $name => $provider) {
-                    if ($provider['appid']) {
+                    if ($provider['appid'] && $authUrl = $this->providerService->getAuthUrl($name, $provider['appid'])) {
                         $params['providers'][ucfirst($name)] = [
-                            'url' => $this->urlGenerator->linkToRoute($this->appName.'.login.oauth', ['provider' => $name])
+                            'url' => $authUrl,
                         ];
                     }
                 }
             }
-            $params['providers'] = array_merge($params['providers'], $this->getProviders('openid'));
-            $params['providers'] = array_merge($params['providers'], $this->getProviders('custom_oidc'));
-            $params['providers'] = array_merge($params['providers'], $this->getProviders('custom_oauth2'));
+            $params['providers'] = array_merge($params['providers'], $this->getCustomProviders());
 
             $connectedLogins = $this->socialConnect->getConnectedLogins($uid);
             foreach ($connectedLogins as $login) {
@@ -84,20 +77,21 @@ class PersonalSettings implements ISettings
         return new TemplateResponse($this->appName, 'personal', $params);
     }
 
-    private function getProviders($providersType)
+    private function getCustomProviders()
     {
         $result = [];
-        $providers = json_decode($this->config->getAppValue($this->appName, $providersType.'_providers', '[]'), true);
-        if (is_array($providers)) {
-            foreach ($providers as $provider) {
+        $providers = json_decode($this->config->getAppValue($this->appName, 'custom_providers'), true) ?: [];
+        foreach ($providers as $providersType => $providerList) {
+            foreach ($providerList as $provider) {
                 $name = $provider['name'];
                 $title = $provider['title'];
                 $result[$title] = [
-                    'url' => $this->urlGenerator->linkToRoute($this->appName.'.login.'.$providersType, ['provider' => $name]),
+                    'url' => $this->urlGenerator->linkToRoute($this->appName.'.login.custom', ['type' => $providersType, 'provider' => $name]),
                     'style' => isset($provider['style']) ? $provider['style'] : '',
                 ];
             }
         }
+
         return $result;
     }
 
