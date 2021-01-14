@@ -10,6 +10,7 @@ use OCA\SocialLogin\Provider\CustomOAuth1;
 use OCA\SocialLogin\Provider\CustomOAuth2;
 use OCA\SocialLogin\Provider\CustomOpenIDConnect;
 use OCA\SocialLogin\Db\SocialConnectDAO;
+use OCP\Accounts\IAccountManager;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IAvatarManager;
 use OCP\IConfig;
@@ -142,6 +143,8 @@ class ProviderService
     private $mailer;
     /** @var SocialConnectDAO */
     private $socialConnect;
+    /** @var IAccountManager */
+    private $accountManager;
 
 
     public function __construct(
@@ -157,7 +160,8 @@ class ProviderService
         ISession $session,
         IL10N $l,
         IMailer $mailer,
-        SocialConnectDAO $socialConnect
+        SocialConnectDAO $socialConnect,
+        IAccountManager $accountManager
     ) {
         $this->appName = $appName;
         $this->request = $request;
@@ -172,6 +176,7 @@ class ProviderService
         $this->l = $l;
         $this->mailer = $mailer;
         $this->socialConnect = $socialConnect;
+        $this->accountManager = $accountManager;
     }
 
     public function getAuthUrl($name, $appId)
@@ -286,6 +291,16 @@ class ProviderService
         }
         if ($redirectUrl = $this->request->getParam('login_redirect_url')) {
             $this->session->set('login_redirect_url', $redirectUrl);
+        }
+
+        $curlOptions = [];
+        $httpClientConfig = $this->config->getSystemValue('social_login_http_client', []);
+        if (isset($httpClientConfig['timeout'])) {
+            $curlOptions[CURLOPT_TIMEOUT] = $httpClientConfig['timeout'];
+            $curlOptions[CURLOPT_CONNECTTIMEOUT] = $httpClientConfig['timeout'];
+        }
+        if ($curlOptions) {
+            $config['curl_options'] = $curlOptions;
         }
 
         try {
@@ -407,8 +422,9 @@ class ProviderService
                     if ($groupMapping && isset($groupMapping[$v])) {
                         $syncGroupNames[] = $groupMapping[$v];
                     }
-                    if ($autoCreateGroups) {
-                        $syncGroupNames[] = $newGroupPrefix.$v;
+                    $autoGroup = $newGroupPrefix.$v;
+                    if ($autoCreateGroups || $this->groupManager->groupExists($autoGroup)) {
+                        $syncGroupNames[] = $autoGroup;
                     }
                 }
 
@@ -428,15 +444,21 @@ class ProviderService
 
             }
 
+            if (isset($profile->address)) {
+                $account = $this->accountManager->getUser($user);
+                $account['address']['value'] = $profile->address;
+                $this->accountManager->updateUser($user, $account);
+            }
+
             $defaultGroup = $profile->data['default_group'];
             if ($defaultGroup && $group = $this->groupManager->get($defaultGroup)) {
                 $group->addUser($user);
             }
         }
 
-
         $this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
         $this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
+        $this->userSession->createRememberMeToken($user);
 
         if ($redirectUrl = $this->session->get('login_redirect_url')) {
             return new RedirectResponse($redirectUrl);

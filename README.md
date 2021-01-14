@@ -65,9 +65,18 @@ You can use comma separated list for multiple domains
 You can use `'social_login_auto_redirect' => true` setting in `config.php` for auto redirect unauthorized users to social login if only one provider is configured.
 If you want to temporary disable this function (e.g. for login as local admin), you can add `noredir=1` query parameter in url for login page. Something like `https://cloud.domain.com/login?noredir=1`
 
+To set timeout for http client, you can use
+```php
+  'social_login_http_client' => [
+    'timeout' => 45,
+  ],
+```
+in `config.php`
+
 ## Hint
 
 ### About Callback(Reply) Url
-You can copy link from specific login button on login page and paste it on provider's website as callback url!
+You can copy link from specific login button on login page and paste it on provider's website as callback url. To make proper button visible, just fill certain provider settings with random data and change it later.
+
 Some users may get strange reply(Callback) url error from provider even if you pasted the right url, that's because your nextcloud server may generate http urls when you are actually using https.
 Please set 'overwriteprotocol' => 'https', in your config.php file.
